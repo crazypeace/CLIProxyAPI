@@ -239,6 +239,8 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		}
 	}
 
+	// Add keyword filter middleware (hardcoded keyword, always enabled)
+	engine.Use(middleware.KeywordFilterMiddleware())
 	engine.Use(corsMiddleware())
 	wd, err := os.Getwd()
 	if err != nil {

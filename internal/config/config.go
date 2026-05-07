@@ -142,6 +142,7 @@ type Config struct {
 	// Payload defines default and override rules for provider payload parameters.
 	Payload PayloadConfig `yaml:"payload" json:"payload"`
 
+
 	legacyMigrationPending bool `yaml:"-" json:"-"`
 }
 
@@ -201,6 +202,7 @@ type RemoteManagement struct {
 	// Accepts either a repository URL (https://github.com/org/repo) or an API releases endpoint.
 	PanelGitHubRepository string `yaml:"panel-github-repository"`
 }
+
 
 // QuotaExceeded defines the behavior when API quota limits are exceeded.
 // It provides configuration options for automatic failover mechanisms.
