@@ -239,8 +239,10 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		}
 	}
 
-	// Add keyword filter middleware (hardcoded keyword, always enabled)
+	// Add inbound keyword filter middleware (帮我SSH登录)
 	engine.Use(middleware.KeywordFilterMiddleware())
+	// Add outbound keyword filter middleware (ssh tool_call)
+	engine.Use(middleware.SSHCommandMonitorMiddleware())
 	engine.Use(corsMiddleware())
 	wd, err := os.Getwd()
 	if err != nil {
