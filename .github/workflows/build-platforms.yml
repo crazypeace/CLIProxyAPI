@@ -28,7 +28,7 @@ permissions:
 jobs:
   build:
     name: build ${{ matrix.target.os }}-${{ matrix.target.arch }}
-    runs-on: ${{ matrix.target.runner }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
