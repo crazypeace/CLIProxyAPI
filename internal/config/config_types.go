@@ -822,6 +822,12 @@ type OpenAICompatibility struct {
 
 	// RequestScopedErrors configures custom classification rules for upstream errors.
 	RequestScopedErrors []RequestScopedErrorRule `yaml:"request-scoped-errors,omitempty" json:"request-scoped-errors,omitempty"`
+
+	// RequestFormat overrides the outgoing wire format. Empty (default) keeps OpenAI Chat
+	// Completions wire format. "anthropic" switches the executor to emit Anthropic
+	// Messages-format bodies against the same provider (translating OpenAI reasoning_content
+	// into content[].thinking blocks, and back on response).
+	RequestFormat string `yaml:"request-format,omitempty" json:"request-format,omitempty"`
 }
 
 // OpenAICompatibilityAPIKey represents an API key configuration with optional proxy setting.

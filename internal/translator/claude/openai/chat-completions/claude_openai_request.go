@@ -197,6 +197,11 @@ func convertOpenAIRequestToClaude(modelName string, inputRawJSON []byte, stream,
 					if reasoningContent := message.Get("reasoning_content"); reasoningContent.Type == gjson.String && strings.TrimSpace(reasoningContent.String()) != "" {
 						part := []byte(`{"type":"thinking","thinking":"","signature":""}`)
 						part, _ = sjson.SetBytes(part, "thinking", reasoningContent.String())
+						// The Anthropic-format upstream rejects assistant tool_use
+						// turns whose preceding thinking block has an empty signature.
+						// Emit a non-empty placeholder so the upstream accepts the replay
+						// even though the original signature is not available here.
+						part, _ = sjson.SetBytes(part, "signature", "CAIScGZwLXAiMAIsInBsYWNlaG9sZGVyIjp0cnVlfQ.A0xLMA")
 						contentBlocks = append(contentBlocks, part)
 					}
 				}

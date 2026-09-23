@@ -106,6 +106,16 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	responseFormat := cliproxyexecutor.ResponseFormatOrSource(opts)
 	to := sdktranslator.FromString("openai")
 	endpoint := "/chat/completions"
+	requestFormatAnthropic := false
+	if compat := e.resolveCompatConfig(auth); compat != nil && strings.EqualFold(strings.TrimSpace(compat.RequestFormat), "anthropic") {
+		// Provider explicitly asks us to ship Anthropic Messages-format bodies to the
+		// upstream OpenAI-compatible endpoint (some providers internally re-translate
+		// OpenAI requests into an Anthropic-format upstream that requires
+		// content[].thinking blocks, not OpenAI reasoning_content).
+		to = sdktranslator.FromString("claude")
+		endpoint = "/v1/messages"
+		requestFormatAnthropic = true
+	}
 	if opts.Alt == "responses/compact" {
 		to = sdktranslator.FromString("openai-response")
 		endpoint = "/responses/compact"
@@ -116,6 +126,12 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	}
 	originalPayload := originalPayloadSource
 	isCompat := helps.APIKeyModelIsCompat(req)
+	if requestFormatAnthropic {
+		// Force the OpenAI->Claude translator with empty-signature preservation so
+		// assistant reasoning_content is emitted as content[].thinking blocks with
+		// the Anthropic-format wire shape, not as a top-level reasoning_content field.
+		isCompat = true
+	}
 	originalTranslated, translated := helps.TranslateRequestPairWithAPIKeyModelCompatibility(ctx, opts.Headers, e.cfg, from, to, baseModel, originalPayload, req.Payload, opts.Stream, isCompat)
 
 	translated, err = helps.ApplyRequestThinking(translated, req, opts, from.String(), to.String(), e.Identifier())
@@ -328,12 +344,21 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	from := opts.SourceFormat
 	responseFormat := cliproxyexecutor.ResponseFormatOrSource(opts)
 	to := sdktranslator.FromString("openai")
+	requestFormatAnthropic := false
+	if compat := e.resolveCompatConfig(auth); compat != nil && strings.EqualFold(strings.TrimSpace(compat.RequestFormat), "anthropic") {
+		// Provider explicitly asks us to ship Anthropic Messages-format bodies upstream.
+		to = sdktranslator.FromString("claude")
+		requestFormatAnthropic = true
+	}
 	originalPayloadSource := req.Payload
 	if len(opts.OriginalRequest) > 0 {
 		originalPayloadSource = opts.OriginalRequest
 	}
 	originalPayload := originalPayloadSource
 	isCompat := helps.APIKeyModelIsCompat(req)
+	if requestFormatAnthropic {
+		isCompat = true
+	}
 	originalTranslated, translated := helps.TranslateRequestPairWithAPIKeyModelCompatibility(ctx, opts.Headers, e.cfg, from, to, baseModel, originalPayload, req.Payload, true, isCompat)
 
 	translated, err = helps.ApplyRequestThinking(translated, req, opts, from.String(), to.String(), e.Identifier())
@@ -361,7 +386,11 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	translated = helps.SetBoolIfDifferent(translated, "stream_options.include_usage", true)
 	reporter.SetTranslatedReasoningEffort(translated, to.String())
 
-	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
+	streamEndpoint := "/chat/completions"
+	if requestFormatAnthropic {
+		streamEndpoint = "/v1/messages"
+	}
+	url := strings.TrimSuffix(baseURL, "/") + streamEndpoint
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
 		return nil, err
