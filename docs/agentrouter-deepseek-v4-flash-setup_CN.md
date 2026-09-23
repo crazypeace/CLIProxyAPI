@@ -109,7 +109,7 @@ error-logs-max-files: <原版值>
 # ↓↓↓ openai-compatibility 整段从原版 config.yaml 复制过来 ↓↓↓
 openai-compatibility:
   - name: agentrouter
-    base-url: https://agentrouter.org/v1   # 原版怎么写就怎么写
+    base-url: https://agentrouter.org      # 原版 是/v1/ 这里要去掉尾部的 /v1/
     api-key-entries:                       # 原版怎么写就怎么写
       - api-key: "<原版的 agentrouter api key>"
     headers:                               # 原版怎么写就怎么写, 不要改
