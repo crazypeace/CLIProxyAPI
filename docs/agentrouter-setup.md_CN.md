@@ -13,7 +13,32 @@
 
 ## 1. 准备: 拿到修复版的二进制
 
-暂略. 以后github上有了 prerelease 再补充.
+从 GitHub Releases 页面下载对应平台的二进制:
+
+- Release 页: <https://github.com/crazypeace/CLIProxyAPI/releases/tag/for-agentrouter-d4f>
+
+| 平台 | 下载链接 | SHA256 |
+|---|---|---|
+| linux amd64 (x86_64) | <https://github.com/crazypeace/CLIProxyAPI/releases/download/for-agentrouter-d4f/CLIProxyAPI-linux-amd64> | `95bed8d7751f58309167bcebd6416ab4212d51a385876b26837c3ca4c4c59a44` |
+| linux arm64 (aarch64) | <https://github.com/crazypeace/CLIProxyAPI/releases/download/for-agentrouter-d4f/CLIProxyAPI-linux-arm64> | `2acafe59760d5c3769511556f4eeed6b5c80254efac8f51a9214ed8d591f8bca` |
+
+> ⚠️ 当前 **没有 Windows 二进制** — 需要本地编译:
+> ```bash
+> git clone -b for-agentrouter-d4f https://github.com/crazypeace/CLIProxyAPI.git
+> cd CLIProxyAPI
+> go build -o cli-proxy-api-patched.exe ./cmd/server
+> ```
+
+下载后建议先核对 SHA256 再用 (下面以 linux-amd64 为例):
+
+```bash
+cd ~/Downloads
+# 下载并校验
+wget -q https://github.com/crazypeace/CLIProxyAPI/releases/download/for-agentrouter-d4f/CLIProxyAPI-linux-amd64.sha256
+wget -q https://github.com/crazypeace/CLIProxyAPI/releases/download/for-agentrouter-d4f/CLIProxyAPI-linux-amd64
+sha256sum -c CLIProxyAPI-linux-amd64.sha256
+# 期望输出: CLIProxyAPI-linux-amd64: OK
+```
 
 ---
 
@@ -45,12 +70,14 @@ mkdir -p ~/cpa-patched
 cd ~/cpa-patched
 
 # 把下载的二进制放进来, 并改名避免和原版混淆
-mv ~/Downloads/cli-proxy-api ./cli-proxy-api-patched
+mv ~/Downloads/CLIProxyAPI-linux-amd64 ./cli-proxy-api-patched
 chmod +x ./cli-proxy-api-patched
 
 # 创建独立的 auth 目录
 mkdir -p ~/.cli-proxy-api-patched
 ```
+
+> linux-arm64 用户把上面文件名换成 `CLIProxyAPI-linux-arm64` 即可。
 
 ### 3.2 编写配置文件
 
@@ -191,3 +218,17 @@ model 名不变 (deepseek-v4-flash)
 
 > ⚠️ 不要 在已经报错 400 的 session 中切换到 新CPA继续对话.
 > new 一个新 session 再使用 新CPA.
+
+---
+
+## 4. 升级到新版
+
+新版本发布时, 同一个 Release 页会有多个 tag:
+<https://github.com/crazypeace/CLIProxyAPI/releases?after=for-agentrouter-d4f>
+
+升级只需要:
+1. 在 Release 页选最新 tag (比如 `for-agentrouter-d4f-v2`)
+2. 下载新二进制覆盖 `~/cpa-patched/cli-proxy-api-patched`
+3. 重启修复版 (前台 Ctrl+C 再起, 或 `systemctl --user restart cpa-patched`)
+
+配置文件 `config-patched.yaml` 通常不需要改, 除非新版本引入了新的必填字段。
