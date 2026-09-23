@@ -13,6 +13,17 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v7.3.15-d4f-test)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -73,7 +84,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo }}
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           COMMIT: ${{ github.sha }}
           BUILD_DATE: ${{ github.event.repository.updated_at }}
         run: |
@@ -113,11 +124,21 @@ jobs:
           sha256sum * > checksums.txt
           cat checksums.txt
 
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.tag.outputs.name }}
           generate_release_notes: true
+          prerelease: ${{ inputs.prerelease == 'true' }}
           files: |
             dist/CLIProxyAPI-windows-amd64.exe
             dist/CLIProxyAPI-linux-amd64
