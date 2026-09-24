@@ -338,6 +338,15 @@ func mapAnthropicStopReasonToOpenAI(anthropicReason string) string {
 // Returns:
 //   - []byte: An OpenAI-compatible JSON response containing all message content and metadata
 func ConvertClaudeResponseToOpenAINonStream(_ context.Context, _ string, originalRequestRawJSON, requestRawJSON, rawJSON []byte, _ *any) []byte {
+	// A non-streaming Anthropic Messages response arrives as a single JSON
+	// Message object ({"type":"message",...}), not as SSE chunks. Translate it
+	// directly; anything else falls through to the SSE-chunk parsing below.
+	if trimmed := bytes.TrimSpace(rawJSON); len(trimmed) > 0 && trimmed[0] == '{' {
+		if root := gjson.ParseBytes(trimmed); root.Get("type").String() == "message" {
+			return convertClaudeMessageObjectToOpenAI(root)
+		}
+	}
+
 	chunks := make([][]byte, 0)
 
 	lines := bytes.Split(rawJSON, []byte("\n"))
@@ -347,9 +356,6 @@ func ConvertClaudeResponseToOpenAINonStream(_ context.Context, _ string, origina
 		}
 		chunks = append(chunks, bytes.TrimSpace(line[5:]))
 	}
-
-	// Base OpenAI non-streaming response template
-	out := []byte(`{"id":"","object":"chat.completion","created":0,"model":"","choices":[{"index":0,"message":{"role":"assistant","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}`)
 
 	var messageID string
 	var model string
@@ -438,6 +444,63 @@ func ConvertClaudeResponseToOpenAINonStream(_ context.Context, _ string, origina
 			}
 		}
 	}
+
+	return buildOpenAINonStreamResponse(messageID, model, createdAt, stopReason, contentParts, reasoningParts, usageTokens, toolCallsAccumulator)
+}
+
+// convertClaudeMessageObjectToOpenAI translates a non-streaming Anthropic
+// Messages API response (a single Message object, {"type":"message",...})
+// into an OpenAI-compatible chat completion response. It handles text,
+// thinking, and tool_use content blocks plus usage metadata.
+func convertClaudeMessageObjectToOpenAI(root gjson.Result) []byte {
+	var messageID string
+	var model string
+	var stopReason string
+	var contentParts []string
+	var reasoningParts []string
+	usageTokens := claudeUsageTokens{}
+	toolCallsAccumulator := make(map[int]*ToolCallAccumulator)
+
+	messageID = root.Get("id").String()
+	model = root.Get("model").String()
+	stopReason = root.Get("stop_reason").String()
+	usageTokens.Merge(root.Get("usage"))
+
+	root.Get("content").ForEach(func(_, block gjson.Result) bool {
+		switch block.Get("type").String() {
+		case "thinking":
+			if thinking := block.Get("thinking"); thinking.Exists() {
+				reasoningParts = append(reasoningParts, thinking.String())
+			}
+		case "text":
+			if text := block.Get("text"); text.Exists() {
+				contentParts = append(contentParts, text.String())
+			}
+		case "tool_use":
+			accumulator := &ToolCallAccumulator{
+				ID:   block.Get("id").String(),
+				Name: block.Get("name").String(),
+			}
+			if input := block.Get("input"); input.Exists() {
+				accumulator.Arguments.WriteString(input.Raw)
+			} else {
+				accumulator.Arguments.WriteString("{}")
+			}
+			toolCallsAccumulator[len(toolCallsAccumulator)] = accumulator
+		}
+		return true
+	})
+
+	return buildOpenAINonStreamResponse(messageID, model, time.Now().Unix(), stopReason, contentParts, reasoningParts, usageTokens, toolCallsAccumulator)
+}
+
+// buildOpenAINonStreamResponse assembles the final OpenAI chat completion
+// object from the accumulated translation state. It is shared by the
+// SSE-chunk and the Message-object translation paths so both produce the
+// same wire format.
+func buildOpenAINonStreamResponse(messageID, model string, createdAt int64, stopReason string, contentParts, reasoningParts []string, usageTokens claudeUsageTokens, toolCallsAccumulator map[int]*ToolCallAccumulator) []byte {
+	// Base OpenAI non-streaming response template
+	out := []byte(`{"id":"","object":"chat.completion","created":0,"model":"","choices":[{"index":0,"message":{"role":"assistant","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}`)
 
 	if usageTokens.HasUsage {
 		promptTokens, completionTokens, totalTokens, cachedTokens, cachedCreationTokens := usageTokens.OpenAIUsage()
