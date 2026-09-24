@@ -507,3 +507,85 @@ func TestConvertClaudeResponseToOpenAI_StreamEmitsTrailingUsageChunkWithCacheDet
 		t.Errorf("expected cached_creation_tokens 20, got %d", gotCachedCreationTokens)
 	}
 }
+
+func TestConvertClaudeResponseToOpenAINonStream_MessageObject(t *testing.T) {
+	ctx := context.Background()
+	var param any
+
+	// Mirrors a real non-streaming Anthropic Messages response (as returned
+	// by agentrouter /v1/messages when the client asked for stream=false).
+	raw := []byte(`{"type":"message","id":"msg_123","model":"deepseek-v4-flash","role":"assistant",` +
+		`"content":[{"type":"thinking","thinking":"thinking-text","signature":"sig-abc"},` +
+		`{"type":"text","text":"hello world"}],"stop_reason":"end_turn",` +
+		`"usage":{"input_tokens":34,"output_tokens":95}}`)
+
+	out := ConvertClaudeResponseToOpenAINonStream(ctx, "deepseek-v4-flash", nil, nil, raw, &param)
+
+	if got := gjson.GetBytes(out, "object").String(); got != "chat.completion" {
+		t.Fatalf("expected chat.completion, got %s", got)
+	}
+	if got := gjson.GetBytes(out, "id").String(); got != "msg_123" {
+		t.Fatalf("expected id msg_123, got %s", got)
+	}
+	if got := gjson.GetBytes(out, "model").String(); got != "deepseek-v4-flash" {
+		t.Fatalf("expected model deepseek-v4-flash, got %s", got)
+	}
+	if got := gjson.GetBytes(out, "choices.0.message.content").String(); got != "hello world" {
+		t.Fatalf("expected content 'hello world', got %q (payload=%s)", got, out)
+	}
+	if got := gjson.GetBytes(out, "choices.0.message.reasoning_content").String(); got != "thinking-text" {
+		t.Fatalf("expected reasoning_content 'thinking-text', got %q (payload=%s)", got, out)
+	}
+	if got := gjson.GetBytes(out, "choices.0.finish_reason").String(); got != "stop" {
+		t.Fatalf("expected finish_reason stop, got %s", got)
+	}
+	if got := gjson.GetBytes(out, "usage.prompt_tokens").Int(); got != 34 {
+		t.Fatalf("expected prompt_tokens 34, got %d", got)
+	}
+	if got := gjson.GetBytes(out, "usage.completion_tokens").Int(); got != 95 {
+		t.Fatalf("expected completion_tokens 95, got %d", got)
+	}
+}
+
+func TestConvertClaudeResponseToOpenAINonStream_MessageObjectToolUse(t *testing.T) {
+	ctx := context.Background()
+	var param any
+
+	raw := []byte(`{"type":"message","id":"msg_456","model":"deepseek-v4-flash","role":"assistant",` +
+		`"content":[{"type":"tool_use","id":"toolu_1","name":"calculator","input":{"expr":"12*34"}}],` +
+		`"stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":20}}`)
+
+	out := ConvertClaudeResponseToOpenAINonStream(ctx, "deepseek-v4-flash", nil, nil, raw, &param)
+
+	if got := gjson.GetBytes(out, "choices.0.message.tool_calls.0.function.name").String(); got != "calculator" {
+		t.Fatalf("expected tool name calculator, got %q (payload=%s)", got, out)
+	}
+	if got := gjson.GetBytes(out, "choices.0.message.tool_calls.0.function.arguments").String(); got != `{"expr":"12*34"}` {
+		t.Fatalf("expected tool arguments, got %q (payload=%s)", got, out)
+	}
+	if got := gjson.GetBytes(out, "choices.0.finish_reason").String(); got != "tool_calls" {
+		t.Fatalf("expected finish_reason tool_calls, got %s", got)
+	}
+}
+
+func TestConvertClaudeResponseToOpenAINonStream_SSEStillWorks(t *testing.T) {
+	ctx := context.Background()
+	var param any
+
+	// The old SSE-chunk shape must keep working through the same entry point.
+	raw := []byte("event: message_start\n" +
+		`data: {"type":"message_start","message":{"id":"msg_sse","model":"m","usage":{"input_tokens":5}}}` + "\n" +
+		"event: content_block_delta\n" +
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}` + "\n" +
+		"event: message_delta\n" +
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}` + "\n")
+
+	out := ConvertClaudeResponseToOpenAINonStream(ctx, "m", nil, nil, raw, &param)
+
+	if got := gjson.GetBytes(out, "choices.0.message.content").String(); got != "hi" {
+		t.Fatalf("expected content 'hi', got %q (payload=%s)", got, out)
+	}
+	if got := gjson.GetBytes(out, "id").String(); got != "msg_sse" {
+		t.Fatalf("expected id msg_sse, got %s", got)
+	}
+}
